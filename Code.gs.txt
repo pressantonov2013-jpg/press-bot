@@ -35,6 +35,29 @@ const KEYS = COLS.map(c => c[0]);
 const TZ = 'Europe/Moscow';
 const now = () => Utilities.formatDate(new Date(), TZ, 'dd.MM.yyyy HH:mm');
 
+/* Статусы: в таблице хранится внутреннее имя, людям показываем понятное */
+const ORDER = ['Новая', 'В работе', 'Размещено', 'Закрыто'];
+const ST = {
+  'Новая':     { icon: '📨', label: 'Отправлена' },
+  'В работе':  { icon: '🛠', label: 'В работе' },
+  'Размещено': { icon: '📬', label: 'Выполнена' },
+  'Закрыто':   { icon: '✅', label: 'Принята' }
+};
+const stLabel = s => { const x = ST[s] || ST['Новая']; return x.icon + ' ' + x.label; };
+/** Строка прогресса: ✔ Отправлена → ● В работе → ○ Выполнена → ○ Принята */
+function progress(s) {
+  const cur = Math.max(0, ORDER.indexOf(s));
+  return ORDER.map((k, i) => i < cur ? '✔ ' + ST[k].label : i === cur ? '<b>● ' + ST[k].label + '</b>' : '○ ' + ST[k].label).join(' → ');
+}
+const HELP_TEXT =
+  '❓ <b>Как это работает</b>\n\n' +
+  '1️⃣ <b>Вы отправляете заявку</b> — кнопка «📝 Новая заявка».\n' +
+  '2️⃣ <b>Пресс-центр берёт её в работу</b> — вам придёт сообщение, кто исполнитель.\n' +
+  '3️⃣ <b>Исполнитель сдаёт результат</b> — ссылки на публикации, охват и скриншоты придут сюда.\n' +
+  '4️⃣ <b>Вы принимаете результат</b> — кнопка «✅ Принять результат», заявка закрывается.\n\n' +
+  '📋 Все свои заявки и их статусы — кнопка «Мои заявки» или команда /my.\n\n' +
+  'Статусы: 📨 Отправлена · 🛠 В работе · 📬 Выполнена · ✅ Принята';
+
 /* ======================= НАСТРОЙКА ======================= */
 
 /** Запустите один раз вручную: создаст таблицу и папку на Диске. */
@@ -74,8 +97,15 @@ function connectBot() {
   })));
   Logger.log(JSON.stringify(tg('setMyCommands', { commands: [
     { command: 'start', description: 'Новая заявка' },
-    { command: 'my', description: 'Мои заявки' }
+    { command: 'my', description: 'Мои заявки и статусы' },
+    { command: 'help', description: 'Как это работает' }
   ] })));
+  Logger.log(JSON.stringify(tg('setMyCommands', { scope: { type: 'all_group_chats' }, commands: [
+    { command: 'bind', description: 'Подключить этот чат как чат пресс-центра' }
+  ] })));
+  tg('setMyShortDescription', { short_description: 'Заявки на размещение в СМИ: отправьте бриф и следите за статусом.' });
+  tg('setMyDescription', { description:
+    'Бот пресс-центра.\n\n1. Заполните заявку на размещение в СМИ.\n2. Пресс-центр возьмёт её в работу.\n3. Ссылки на публикации придут сюда.\n\nНажмите «Запустить», чтобы начать.' });
 }
 
 /** Проверка: что видит Telegram на стороне вебхука. */
@@ -171,11 +201,7 @@ function submitBrief(user, d, files) {
   });
   if (sent.ok) update(item, { group_msg_id: sent.result.message_id });
 
-  tg('sendMessage', {
-    chat_id: user.id, parse_mode: 'HTML',
-    text: `✅ <b>Заявка №${id} «${esc(item.project)}» отправлена в пресс-центр.</b>\nНапишу, когда её возьмут в работу.`,
-    reply_markup: { inline_keyboard: [[{ text: '📄 Открыть заявку', web_app: { url: cardUrl(id) } }]] }
-  });
+  notifyManager(item, `📨 <b>Заявка №${id} «${esc(item.project)}» отправлена в пресс-центр.</b>\nНапишу, как только её возьмут в работу.`);
   return { ok: true, id };
 }
 
@@ -193,9 +219,12 @@ function takeRequest(user, id) {
   } finally { lock.releaseLock(); }
 
   refreshGroupMessage(item);
+  notifyManager(item, `🛠 <b>Заявка №${item.id} «${esc(item.project)}» взята в работу.</b>\nИсполнитель: ${esc(item.executor_name)}${user.username ? ' (@' + user.username + ')' : ''}.\nКак только появятся ссылки, пришлю их сюда.`);
+  // Исполнителю — личное сообщение с кнопкой сдачи (дойдёт, если он хоть раз запускал бота)
   tg('sendMessage', {
-    chat_id: item.manager_id, parse_mode: 'HTML',
-    text: `🛠 <b>Заявка №${item.id} «${esc(item.project)}» в работе.</b>\nИсполнитель: ${esc(item.executor_name)}${user.username ? ' (@' + user.username + ')' : ''}.\nКак только появятся ссылки, пришлю их сюда.`
+    chat_id: user.id, parse_mode: 'HTML',
+    text: `🙋 <b>Вы взяли заявку №${item.id} «${esc(item.project)}».</b>\nСрок: ${esc(item.deadline)}\n\nКогда публикации выйдут, нажмите «📤 Сдать результат» и добавьте ссылки — менеджер сразу их получит.`,
+    reply_markup: { inline_keyboard: [[{ text: '📤 Сдать результат', web_app: { url: cardUrl(item.id) } }]] }
   });
   return { item };
 }
@@ -217,11 +246,12 @@ function submitResult(user, id, d, files) {
 
   const links = lines(item.links).map((l, i) => `${i + 1}. ${esc(l)}`).join('\n');
   const shotLinks = lines(item.screens).map((u, i) => `<a href="${esc(u)}">скриншот ${i + 1}</a>`).join(', ');
-  let text = `📬 <b>${again ? 'Обновлён результат' : 'Готово!'} Заявка №${item.id} «${esc(item.project)}»</b>\n` +
-    `Исполнитель: ${esc(item.executor_name)}\n\n🔗 <b>Ссылки:</b>\n${links}`;
+  let text = `📬 <b>${again ? 'Обновлён результат' : 'Заявка выполнена!'} №${item.id} «${esc(item.project)}»</b>\n` +
+    `${progress(item.status)}\n\nИсполнитель: ${esc(item.executor_name)}\n\n🔗 <b>Ссылки:</b>\n${links}`;
   if (item.reach) text += `\n\n📊 <b>Охват / просмотры:</b> ${esc(item.reach)}`;
   if (shotLinks) text += `\n\n🖼 <b>Скриншоты:</b> ${shotLinks}`;
   if (item.notes) text += `\n\n💬 ${esc(item.notes)}`;
+  text += '\n\nВсё в порядке? Нажмите «✅ Принять результат».';
 
   tg('sendMessage', {
     chat_id: item.manager_id, text, parse_mode: 'HTML', disable_web_page_preview: true,
@@ -244,6 +274,7 @@ function acceptRequest(user, id) {
     chat_id: item.executor_id, parse_mode: 'HTML',
     text: `👍 Менеджер принял результат по заявке №${item.id} «${esc(item.project)}». Спасибо!`
   });
+  notifyManager(item, `✅ <b>Заявка №${item.id} «${esc(item.project)}» закрыта.</b> Спасибо!`);
   return item;
 }
 
@@ -252,7 +283,8 @@ function myList(user) {
   return readAll()
     .filter(x => String(x.manager_id) === String(user.id) || (member && String(x.executor_id) === String(user.id)))
     .reverse().slice(0, 30)
-    .map(x => ({ id: x.id, project: x.project, status: x.status, deadline: x.deadline,
+    .map(x => ({ id: x.id, project: x.project, status: x.status, deadline: x.deadline, created: x.created,
+                 executor_name: x.executor_name,
                  role: String(x.manager_id) === String(user.id) ? 'manager' : 'executor' }));
 }
 
@@ -314,28 +346,65 @@ function handleUpdate(u) {
   }
 
   // Личный чат
-  if (cmd === '/my') {
-    const items = myList(m.from);
-    const list = items.length
-      ? items.slice(0, 15).map(x => `№${x.id} · ${esc(x.project)} — <b>${esc(x.status)}</b>`).join('\n')
-      : 'Заявок пока нет.';
-    return tg('sendMessage', { chat_id: m.chat.id, parse_mode: 'HTML', text: '📋 <b>Ваши заявки</b>\n\n' + list,
-      reply_markup: { inline_keyboard: [[{ text: '📋 Открыть списком', web_app: { url: prop('MINIAPP_URL') + '?screen=my' } }]] } });
-  }
+  if (cmd === '/my' || /мои заявки/i.test(text)) return sendMyList(m.chat.id, m.from);
+  if (cmd === '/help' || /как это работает/i.test(text)) return sendHelp(m.chat.id);
+  return sendWelcome(m.chat.id);
+}
+
+function mainKeyboard() {
+  return { inline_keyboard: [
+    [{ text: '📝 Новая заявка', web_app: { url: prop('MINIAPP_URL') } }],
+    [{ text: '📋 Мои заявки', web_app: { url: prop('MINIAPP_URL') + '?screen=my' } }, { text: '❓ Как это работает', callback_data: 'help' }]
+  ] };
+}
+
+function sendWelcome(chatId) {
+  const caption = '👋 <b>Здравствуйте! Это бот пресс-центра.</b>\n\n' +
+    'Здесь можно отправить заявку на размещение в СМИ и следить за её статусом:\n' +
+    '📨 Отправлена → 🛠 В работе → 📬 Выполнена → ✅ Принята\n\n' +
+    'Обо всех изменениях я сразу напишу сюда, а ссылки на публикации пришлю, как только они будут готовы.\n\n' +
+    '👇 Нажмите «📝 Новая заявка», чтобы начать.';
+  const r = tg('sendPhoto', { chat_id: chatId, photo: prop('MINIAPP_URL') + 'welcome.png', caption, parse_mode: 'HTML', reply_markup: mainKeyboard() });
+  if (!r.ok) tg('sendMessage', { chat_id: chatId, text: caption, parse_mode: 'HTML', reply_markup: mainKeyboard() });
+}
+
+function sendHelp(chatId) {
+  return tg('sendMessage', { chat_id: chatId, text: HELP_TEXT, parse_mode: 'HTML', reply_markup: mainKeyboard() });
+}
+
+function sendMyList(chatId, user) {
+  const items = myList(user);
+  if (!items.length) return tg('sendMessage', { chat_id: chatId, parse_mode: 'HTML',
+    text: '📋 <b>Мои заявки</b>\n\nЗаявок пока нет. Нажмите «📝 Новая заявка».', reply_markup: mainKeyboard() });
+  const count = s => items.filter(x => x.status === s).length;
+  const summary = ORDER.map(s => `${ST[s].icon} ${ST[s].label}: <b>${count(s)}</b>`).join('\n');
+  const list = items.slice(0, 15).map(x =>
+    `${ST[x.status] ? ST[x.status].icon : '📨'} №${x.id} · ${esc(x.project)} — <b>${esc(ST[x.status] ? ST[x.status].label : x.status)}</b>` +
+    (x.role === 'executor' ? ' <i>(вы исполнитель)</i>' : '')).join('\n');
+  const buttons = items.slice(0, 6).map(x => [{ text: `${ST[x.status] ? ST[x.status].icon : '📨'} №${x.id} · ${String(x.project).slice(0, 28)}`, web_app: { url: cardUrl(x.id) } }]);
+  buttons.push([{ text: '📋 Открыть все заявки', web_app: { url: prop('MINIAPP_URL') + '?screen=my' } }]);
+  buttons.push([{ text: '📝 Новая заявка', web_app: { url: prop('MINIAPP_URL') } }]);
+  return tg('sendMessage', { chat_id: chatId, parse_mode: 'HTML',
+    text: '📋 <b>Мои заявки</b>\n\n' + summary + '\n\n' + list + '\n\nНажмите на заявку, чтобы открыть её.',
+    reply_markup: { inline_keyboard: buttons } });
+}
+
+/** Сообщение автору заявки: текст + строка статуса + кнопки. */
+function notifyManager(item, text) {
   return tg('sendMessage', {
-    chat_id: m.chat.id, parse_mode: 'HTML',
-    text: '👋 <b>Здравствуйте!</b>\nЗдесь можно отправить заявку на размещение в СМИ.\n\n' +
-          'Заполните форму — она сразу уйдёт в пресс-центр. Я напишу, когда заявку возьмут в работу, и пришлю ссылки на публикации, когда всё будет готово.',
-    reply_markup: { inline_keyboard: [
-      [{ text: '📝 Новая заявка', web_app: { url: prop('MINIAPP_URL') } }],
-      [{ text: '📋 Мои заявки', web_app: { url: prop('MINIAPP_URL') + '?screen=my' } }]
-    ] }
+    chat_id: item.manager_id, parse_mode: 'HTML', disable_web_page_preview: true,
+    text: text + '\n\n' + progress(item.status),
+    reply_markup: { inline_keyboard: [[
+      { text: '📄 Открыть заявку', web_app: { url: cardUrl(item.id) } },
+      { text: '📋 Мои заявки', web_app: { url: prop('MINIAPP_URL') + '?screen=my' } }
+    ]] }
   });
 }
 
 function handleCallback(q) {
   const [action, id] = String(q.data || '').split(':');
   try {
+    if (action === 'help') { answer(q, ''); return sendHelp(q.message.chat.id); }
     if (action === 'take') {
       const r = takeRequest(q.from, id);
       return answer(q, r.already ? r.msg : 'Заявка ваша! Когда будет готово — «Сдать результат».', !!r.already);
@@ -356,7 +425,8 @@ function handleCallback(q) {
 
 function groupText(x) {
   const icon = { 'Новая': '🆕', 'В работе': '🛠', 'Размещено': '📬', 'Закрыто': '✅' }[x.status] || '🆕';
-  let t = `${icon} <b>Заявка №${x.id}</b> · ${esc(x.status)}\n<b>${esc(x.project)}</b>\n\n` +
+  const label = x.status === 'Новая' ? 'Новая' : (ST[x.status] ? ST[x.status].label : x.status);
+  let t = `${icon} <b>Заявка №${x.id}</b> · ${esc(label)}\n<b>${esc(x.project)}</b>\n\n` +
     `👤 ${esc(x.manager_name)}${x.manager_username ? ' (@' + esc(x.manager_username) + ')' : ''}\n` +
     `🎯 ${esc(x.goal)}\n⏱ ${esc(x.priority)} · до ${esc(x.deadline)}\n` +
     `📰 ${esc(x.media)} · ${esc(x.payment)} · размещений: ${esc(x.quantity)}\n` +
@@ -364,6 +434,13 @@ function groupText(x) {
   if (x.executor_name) t += `\n\n🙋 Исполнитель: <b>${esc(x.executor_name)}</b>`;
   if (x.status === 'Размещено') t += `\n🔗 Результат отправлен менеджеру ${esc(x.done_at)}`;
   if (x.status === 'Закрыто') t += `\n✅ Менеджер принял результат`;
+  const todo = {
+    'Новая': '👉 Кто берёт? Нажмите «✋ Взять в работу».',
+    'В работе': '👉 Исполнитель: когда публикации выйдут, нажмите «📤 Сдать результат».',
+    'Размещено': '⏳ Ждём, когда менеджер примет результат.'
+  }[x.status];
+  t += '\n\n' + progress(x.status);
+  if (todo) t += '\n' + todo;
   return t;
 }
 

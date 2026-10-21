@@ -45,7 +45,7 @@ body{
 /* Шапка */
 .hero{display:flex;align-items:center;gap:18px;background:linear-gradient(135deg,#1b3d72 0%,#132a52 100%);border:1px solid rgba(140,190,255,.25);border-radius:22px;padding:22px 24px;margin-bottom:16px;box-shadow:var(--shadow)}
 .logo{flex:0 0 auto;width:76px;height:76px;border-radius:16px;display:grid;place-items:center;overflow:hidden;background:#fff;box-shadow:0 6px 18px rgba(0,0,0,.25)}
-.logo img{max-width:80%;max-height:80%;object-fit:contain;display:block}
+.logo img{max-width:84%;max-height:84%;object-fit:contain;display:block}
 .logo .ph{font-size:10px;font-weight:700;color:#6b7a93;letter-spacing:.06em;text-transform:uppercase}
 .hero-text{min-width:0}
 .badge{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:#0b1730;background:#9fd0ff;padding:5px 11px;border-radius:999px;margin-bottom:8px}
@@ -128,6 +128,24 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#fff;color:#13243f;pa
 .files{display:flex;flex-wrap:wrap;gap:8px}
 .filebtn{display:inline-flex;align-items:center;gap:8px;background:#fff;color:#13243f;border-radius:10px;padding:9px 13px;font-weight:700;font-size:13px;text-decoration:none;cursor:pointer;border:0;font-family:inherit}
 .muted{color:var(--muted);font-size:14px}
+/* Шаги заявки */
+.steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0}
+.step{position:relative;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px 10px 11px;min-width:0}
+.step .ic{font-size:18px;line-height:1}
+.step b{display:block;font-size:13px;margin-top:6px}
+.step small{display:block;font-size:11px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
+.step.done{background:rgba(111,220,154,.12);border-color:rgba(111,220,154,.45)}
+.step.cur{background:rgba(255,200,107,.16);border-color:#ffc86b;box-shadow:0 0 0 2px rgba(255,200,107,.25)}
+.step.todo{opacity:.55}
+.howto{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:14px}
+.howto div{background:rgba(255,255,255,.06);border:1px solid rgba(140,190,255,.2);border-radius:12px;padding:10px;font-size:12px;color:#cfdcf3;line-height:1.35}
+.howto b{display:block;color:#fff;font-size:13px;margin-bottom:2px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.tab{border:1px solid rgba(140,190,255,.3);background:transparent;color:#d5e2f8;border-radius:999px;padding:7px 13px;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.tab.on{background:#9fd0ff;color:#0b1730;border-color:#9fd0ff}
+.tab span{opacity:.7;margin-left:4px}
+.nextstep{font-size:13px;color:#ffe2ad;margin-top:4px}
+@media (max-width:560px){.steps,.howto{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .resultlist{margin:0;padding-left:20px;display:grid;gap:4px}
 .resultlist a{color:#a9d4ff;overflow-wrap:anywhere}
 
@@ -178,7 +196,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#fff;color:#13243f;pa
   </div>
 
   <header class="hero">
-    <div class="logo"><span class="ph">Логотип</span></div>
+    <div class="logo"><img src="logo.png" alt="Логотип"></div>
     <div class="hero-text">
       <span class="badge" id="heroBadge">Бриф для пресс-центра</span>
       <h1 id="heroTitle">Заявка на размещение в СМИ</h1>
@@ -188,6 +206,12 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#fff;color:#13243f;pa
 
   <!-- ============ ЭКРАН 1. НОВАЯ ЗАЯВКА ============ -->
   <section id="scr-form" hidden>
+    <div class="howto">
+      <div><b>1. 📨 Отправляете</b>Заполните бриф ниже</div>
+      <div><b>2. 🛠 В работе</b>Бот напишет, кто исполнитель</div>
+      <div><b>3. 📬 Выполнена</b>Ссылки придут в бот</div>
+      <div><b>4. ✅ Принята</b>Вы подтверждаете результат</div>
+    </div>
     <form id="form" class="stackcards" novalidate>
       <section class="card c1">
         <div class="cardhead"><div class="num">1</div><h2>Проект</h2></div>
@@ -320,8 +344,10 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#fff;color:#13243f;pa
       <div class="big">✓</div>
       <h2 id="doneTitle">Заявка отправлена</h2>
       <p id="doneText">Пресс-центр уже получил её. Бот напишет вам, когда заявку возьмут в работу и когда появятся ссылки.</p>
+      <p class="muted" style="margin-top:-4px">📨 Отправлена → 🛠 В работе → 📬 Выполнена → ✅ Принята</p>
       <div style="display:grid;gap:10px;max-width:320px;margin:0 auto">
-        <button class="btn light" type="button" id="doneClose">Закрыть</button>
+        <button class="btn light" type="button" id="doneMy">Мои заявки и статусы</button>
+        <button class="btn ghost" type="button" id="doneClose">Закрыть</button>
         <button class="btn ghost" type="button" id="doneNew">Отправить ещё одну</button>
       </div>
     </div>
@@ -466,6 +492,7 @@ $('sendBtn').addEventListener('click', async () => {
 });
 $('doneClose').addEventListener('click', () => { if (tg && !DEMO) tg.close(); else openForm(true); });
 $('doneNew').addEventListener('click', () => openForm(true));
+$('doneMy').addEventListener('click', openMy);
 
 function openForm(reset) {
   if (reset) { form.reset(); $('photoinfo').textContent = ''; $('bannerinfo').textContent = ''; $('formStatus').textContent = 'Заявка сразу уйдёт в пресс-центр'; $('formStatus').classList.remove('err'); }
@@ -475,7 +502,29 @@ function openForm(reset) {
 
 /* ================== КАРТОЧКА ЗАЯВКИ ================== */
 const STATUS_CLASS = { 'Новая': 's-new', 'В работе': 's-work', 'Размещено': 's-done', 'Закрыто': 's-closed' };
-const pill = s => `<span class="pill ${STATUS_CLASS[s] || 's-new'}">${esc(s)}</span>`;
+const ORDER = ['Новая', 'В работе', 'Размещено', 'Закрыто'];
+const ST = {
+  'Новая':     { icon: '📨', label: 'Отправлена' },
+  'В работе':  { icon: '🛠', label: 'В работе' },
+  'Размещено': { icon: '📬', label: 'Выполнена' },
+  'Закрыто':   { icon: '✅', label: 'Принята' }
+};
+const stName = s => (ST[s] ? ST[s].label : s);
+const pill = s => `<span class="pill ${STATUS_CLASS[s] || 's-new'}">${esc(stName(s))}</span>`;
+function stepsHtml(d) {
+  const cur = Math.max(0, ORDER.indexOf(d.status));
+  const when = [d.created, d.taken_at, d.done_at, d.closed_at];
+  const who = ['', d.executor_name, '', ''];
+  return `<div class="steps">${ORDER.map((k, i) => `
+    <div class="step ${i < cur || (i === cur && i === 3) ? 'done' : i === cur ? 'cur' : 'todo'}">
+      <div class="ic">${ST[k].icon}</div><b>${ST[k].label}</b>
+      <small>${i <= cur && when[i] ? esc(when[i]) : 'ещё нет'}${who[i] && i <= cur ? '<br>' + esc(who[i]) : ''}</small>
+    </div>`).join('')}</div>`;
+}
+function nextStep(d) {
+  if (d.role === 'manager') return { 'Новая': 'Ждём, когда пресс-центр возьмёт заявку', 'В работе': 'Исполнитель готовит публикации', 'Размещено': 'Проверьте ссылки и примите результат', 'Закрыто': 'Заявка закрыта' }[d.status] || '';
+  return { 'Новая': 'Нажмите «Взять в работу»', 'В работе': d.is_mine ? 'Добавьте ссылки и отправьте менеджеру' : 'Заявку ведёт ' + (d.executor_name || 'другой исполнитель'), 'Размещено': 'Ждём, когда менеджер примет результат', 'Закрыто': 'Заявка закрыта' }[d.status] || '';
+}
 const linesToList = txt => String(txt || '').split(/\n+/).map(s => s.trim()).filter(Boolean);
 const linkify = s => /^https?:\/\//i.test(s) ? `<a href="${esc(s)}" data-ext="1">${esc(s)}</a>` : esc(s);
 
@@ -506,6 +555,12 @@ function renderCard() {
     .map(([u, t]) => `<button type="button" class="filebtn" data-url="${esc(u)}">⬇ ${esc(t.trim())}</button>`).join('');
 
   let html = `
+  <section class="card c2">
+    <div class="cardhead"><div class="num">●</div><h2>Статус заявки</h2><span style="margin-left:auto">${pill(d.status)}</span></div>
+    ${stepsHtml(d)}
+    <div class="nextstep">👉 ${esc(nextStep(d))}</div>
+  </section>
+
   <section class="card c1">
     <div class="cardhead"><div class="num">1</div><h2>Главное</h2><span style="margin-left:auto">${pill(d.status)}</span></div>
     <div class="stack">
@@ -584,7 +639,7 @@ function renderCard() {
   <div class="actions"><div class="status" id="cardStatus">Всё в порядке? Закройте заявку</div>
     <button class="btn go" type="button" id="acceptBtn">Принять результат</button></div>`;
   } else if (d.role === 'manager') {
-    const txt = { 'Новая': 'Ждёт, когда пресс-центр возьмёт её в работу', 'В работе': 'Пресс-центр работает над заявкой', 'Закрыто': 'Заявка закрыта' }[d.status] || '';
+    const txt = { 'Новая': '📨 Отправлена — ждёт исполнителя', 'В работе': '🛠 Пресс-центр работает над заявкой', 'Закрыто': '✅ Заявка закрыта' }[d.status] || '';
     html += `<div class="actions"><div class="status">${esc(txt)}</div><button class="btn ghost" type="button" id="toMy">Все мои заявки</button></div>`;
   }
 
@@ -634,21 +689,30 @@ function bindCard() {
 /* ================== МОИ ЗАЯВКИ ================== */
 async function openMy() {
   show('my');
-  setHero('Пресс-центр', 'Мои заявки', 'Отправленные вами и взятые вами в работу');
+  setHero('Пресс-центр', 'Мои заявки', 'Статусы обновляются сами: бот пишет о каждом изменении');
   $('myList').innerHTML = '<div class="loader">Загружаем…</div>';
   try {
     const r = await api('my');
     if (!r.items.length) { $('myList').innerHTML = '<div class="empty">Заявок пока нет. Нажмите «Новая заявка».</div>'; return; }
-    $('myList').innerHTML = r.items.map(it => `
-      <button type="button" class="listitem" data-id="${esc(it.id)}">
-        <span class="n">№${esc(it.id)}</span>
-        <span class="t"><b>${esc(it.project)}</b><small>${esc(it.role === 'executor' ? 'Вы исполнитель' : 'Вы менеджер')} · срок: ${esc(it.deadline)}</small></span>
-        ${pill(it.status)}
-      </button>`).join('');
-    document.querySelectorAll('.listitem').forEach(b => b.addEventListener('click', () => { cameFromList = true; openCard(b.dataset.id); }));
+    myItems = r.items; renderMy();
   } catch (e) {
     $('myList').innerHTML = `<div class="empty">${esc(e.message)}</div>`;
   }
+}
+let myItems = [], myFilter = 'all';
+function renderMy() {
+  const cnt = s => myItems.filter(x => x.status === s).length;
+  const tabs = [['all', 'Все', myItems.length], ...ORDER.map(s => [s, ST[s].icon + ' ' + ST[s].label, cnt(s)])];
+  const list = myItems.filter(x => myFilter === 'all' || x.status === myFilter);
+  $('myList').innerHTML = `<div class="tabs">${tabs.map(([k, t, n]) => `<button type="button" class="tab ${k === myFilter ? 'on' : ''}" data-f="${esc(k)}">${esc(t)}<span>${n}</span></button>`).join('')}</div>` +
+    (list.length ? list.map(it => `
+      <button type="button" class="listitem" data-id="${esc(it.id)}">
+        <span class="n">№${esc(it.id)}</span>
+        <span class="t"><b>${esc(it.project)}</b><small>${esc(it.role === 'executor' ? 'Вы исполнитель' : 'Вы автор')}${it.deadline ? ' · срок: ' + esc(it.deadline) : ''}${it.executor_name && it.role !== 'executor' ? ' · исполнитель: ' + esc(it.executor_name) : ''}</small></span>
+        ${pill(it.status)}
+      </button>`).join('') : '<div class="empty">В этом статусе заявок нет</div>');
+  document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => { myFilter = b.dataset.f; renderMy(); }));
+  document.querySelectorAll('.listitem').forEach(b => b.addEventListener('click', () => { cameFromList = true; openCard(b.dataset.id); }));
 }
 $('myNew').addEventListener('click', () => openForm(true));
 
@@ -663,13 +727,13 @@ const demoItem = {
   fulltext: 'Стартовал Познавательный марафон для школьников…\n\nПолный текст публикации появится здесь.',
   photo: '', banner: '', editing: 'Можно адаптировать', keep: 'Название проекта и ссылку на регистрацию',
   result_wanted: 'Ссылки на публикации, Скриншоты, Охват', executor_name: '',
-  links: '', reach: '', screens: '', notes: ''
+  links: '', reach: '', screens: '', notes: '', taken_at: '', done_at: '', closed_at: ''
 };
 async function mockApi(action, p) {
   await new Promise(r => setTimeout(r, 450));
   if (action === 'submit') return { ok: true, id: 13 };
   if (action === 'get') return { ok: true, item: demoItem };
-  if (action === 'take') { Object.assign(demoItem, { status: 'В работе', executor_name: 'Анна (пресс-центр)', is_mine: true }); return { ok: true, item: demoItem }; }
+  if (action === 'take') { Object.assign(demoItem, { status: 'В работе', executor_name: 'Анна (пресс-центр)', is_mine: true, taken_at: '21.10.2026 14:20' }); return { ok: true, item: demoItem }; }
   if (action === 'result') { Object.assign(demoItem, p.data, { status: 'Размещено', screens: (p.files.shots || []).map(f => f.name).join('\n') }); return { ok: true, item: demoItem }; }
   if (action === 'accept') { demoItem.status = 'Закрыто'; return { ok: true, item: demoItem }; }
   if (action === 'my') return { ok: true, items: [
