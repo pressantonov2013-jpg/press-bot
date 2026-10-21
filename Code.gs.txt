@@ -335,6 +335,15 @@ function handleUpdate(u) {
   const isGroup = m.chat.type === 'group' || m.chat.type === 'supergroup';
 
   if (isGroup) {
+    // Бота добавили в группу — подключаемся автоматически, если чат ещё не выбран
+    const me = prop('BOT_USERNAME').toLowerCase();
+    if ((m.new_chat_members || []).some(u => String(u.username || '').toLowerCase() === me)) {
+      if (!prop('GROUP_CHAT_ID')) {
+        P.setProperty('GROUP_CHAT_ID', String(m.chat.id));
+        return reply(m, '✅ Бот подключён! Новые заявки будут приходить в этот чат.');
+      }
+      return reply(m, 'Здравствуйте! Чтобы заявки приходили сюда, напишите /bind');
+    }
     if (cmd === '/bind') {
       if (prop('GROUP_CHAT_ID') && prop('GROUP_CHAT_ID') !== String(m.chat.id)) {
         return reply(m, 'Бот уже привязан к другому чату. Чтобы сменить чат, очистите свойство GROUP_CHAT_ID в Apps Script.');
