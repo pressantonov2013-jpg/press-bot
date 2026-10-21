@@ -1,1 +1,1 @@
-window.PRESS_API_URL = 'PASTE_APPS_SCRIPT_EXEC_URL_HERE';
+window.PRESS_API_URL = 'https://script.google.com/macros/s/AKfycbwRsItmtNdEkgqo3tExBt3I_9b2nuLyMHwJQKTpmSh2q2Uc41dpcW_REXEUruaqfaHHVw/exec';
