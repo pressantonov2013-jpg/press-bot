@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Пресс-центр · заявки</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* Тёмно-синее мини-приложение; у каждого раздела свой цвет, поля белые и контрастные */
+:root{
+  color-scheme:dark;
+  --bg:#0b1730; --bg2:#091228;
+  --ink:#f3f7ff; --muted:#b3c3de;
+  --field:#ffffff; --field-ink:#13243f; --field-ph:#8a98b0;
+  --req:#ff9aa8;
+  --shadow:0 14px 34px rgba(3,10,26,.35);
+  --c:#7cc0ff; --tint:#15305a;
+  --st-new:#7cc8f2; --st-work:#ffc86b; --st-done:#6fdc9a; --st-closed:#9fb1cf;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;
+  background:
+    radial-gradient(900px 500px at 15% -10%, rgba(93,162,255,.22), transparent 60%),
+    radial-gradient(700px 500px at 100% 10%, rgba(160,130,240,.16), transparent 60%),
+    linear-gradient(180deg,var(--bg) 0%,var(--bg2) 100%);
+  background-attachment:fixed; background-color:var(--bg);
+  color:var(--ink);
+  font-family:"Manrope",-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+  font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased;
+}
+[hidden]{display:none!important}
+.shell{max-width:840px;margin:0 auto;padding-block:20px 48px;padding-left:max(14px, env(safe-area-inset-left, 0px));padding-right:max(14px, env(safe-area-inset-right, 0px))}
+
+/* Демо-полоса (видна только вне Telegram) */
+.demo{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;padding:10px 12px;border-radius:14px;background:rgba(255,200,107,.12);border:1px solid rgba(255,200,107,.35);font-size:13px;color:#ffe2ad}
+.demo b{margin-right:auto}
+.demo button{border:1px solid rgba(255,226,173,.4);background:transparent;color:#ffe2ad;border-radius:999px;padding:5px 11px;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.demo button.on{background:#ffe2ad;color:#2a1d05}
+
+/* Шапка */
+.hero{display:flex;align-items:center;gap:18px;background:linear-gradient(135deg,#1b3d72 0%,#132a52 100%);border:1px solid rgba(140,190,255,.25);border-radius:22px;padding:22px 24px;margin-bottom:16px;box-shadow:var(--shadow)}
+.logo{flex:0 0 auto;width:76px;height:76px;border-radius:16px;display:grid;place-items:center;overflow:hidden;background:#fff;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+.logo img{max-width:80%;max-height:80%;object-fit:contain;display:block}
+.logo .ph{font-size:10px;font-weight:700;color:#6b7a93;letter-spacing:.06em;text-transform:uppercase}
+.hero-text{min-width:0}
+.badge{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:#0b1730;background:#9fd0ff;padding:5px 11px;border-radius:999px;margin-bottom:8px}
+h1{margin:0 0 4px;font-size:25px;line-height:1.15;font-weight:800;letter-spacing:-.01em;text-wrap:balance;overflow-wrap:anywhere}
+.hero p{margin:0;color:#cfdcf3;font-size:14px}
+
+/* Разделы */
+.stackcards{display:grid;gap:14px}
+.card{position:relative;background:var(--tint);border:1px solid color-mix(in srgb, var(--c) 35%, transparent);border-radius:18px;padding:22px 24px 24px;box-shadow:var(--shadow);overflow:hidden}
+.card::before{content:"";position:absolute;inset:0 auto 0 0;width:5px;background:var(--c)}
+.c1{--c:#7cc8f2;--tint:#163a5e}
+.c2{--c:#a9b6ff;--tint:#252f5e}
+.c3{--c:#6fdcc8;--tint:#123f50}
+.c4{--c:#8fb4ff;--tint:#1b345d}
+.c5{--c:#cfa8f5;--tint:#2d2c5c}
+.c6{--c:#6fdc9a;--tint:#14412f}
+.cardhead{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.num{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;background:var(--c);color:#0b1730;font-weight:800;font-size:15px;flex:0 0 auto}
+.cardhead h2{margin:0;font-size:18px;font-weight:800;line-height:1.2;color:#fff}
+
+.stack{display:grid;gap:18px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.timingrow{display:grid;grid-template-columns:1.4fr 1fr 110px;gap:18px;align-items:start}
+.field{min-width:0}
+label.caption{display:block;margin-bottom:8px;font-size:13px;font-weight:700;color:#fff}
+.req{color:var(--req)}
+
+input:not([type=radio]):not([type=checkbox]):not([type=file]),textarea{
+  width:100%;height:46px;border:2px solid transparent;background:var(--field);color:var(--field-ink);
+  border-radius:11px;padding:0 14px;font:inherit;font-size:15px;outline:none;color-scheme:light;
+  transition:border-color .15s, box-shadow .15s;
+}
+textarea{height:auto;min-height:100px;padding:12px 14px;resize:vertical;line-height:1.5}
+input::placeholder,textarea::placeholder{color:var(--field-ph)}
+input:focus,textarea:focus{border-color:var(--c);box-shadow:0 0 0 4px color-mix(in srgb, var(--c) 30%, transparent)}
+
+.optiongrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.option{display:flex;align-items:center;gap:12px;min-height:48px;border:2px solid rgba(255,255,255,.14);background:rgba(255,255,255,.07);border-radius:11px;padding:10px 14px;cursor:pointer;transition:border-color .15s, background .15s}
+.option:hover{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.26)}
+.option input{accent-color:var(--c);width:18px;height:18px;margin:0;flex:0 0 auto}
+.option strong{font-weight:700;font-size:14px;display:block;color:#fff}
+.option small{display:block;color:var(--muted);font-size:12px;margin-top:1px;line-height:1.35}
+.option:has(input:checked){border-color:var(--c);background:color-mix(in srgb, var(--c) 22%, transparent)}
+
+.upload{display:flex;align-items:center;min-height:48px;border:2px dashed rgba(255,255,255,.25);background:rgba(255,255,255,.06);border-radius:11px;padding:8px 10px}
+input[type=file]{width:100%;font:inherit;font-size:13px;color:var(--muted)}
+input[type=file]::file-selector-button{border:0;background:#fff;color:#13243f;border-radius:8px;padding:8px 13px;margin-right:10px;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.filehint{font-size:12px;color:var(--muted);margin-top:6px}
+.filehint:empty{display:none}
+
+/* Кнопки */
+.actions{position:sticky;bottom:12px;z-index:5;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:rgba(8,17,36,.9);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(140,190,255,.22);padding:12px 12px 12px 18px;border-radius:16px;box-shadow:var(--shadow);margin-top:16px}
+.status{font-size:14px;color:#d5e2f8;margin-right:auto}
+.status.err{color:var(--req)}
+.btn{border:0;border-radius:11px;min-height:46px;padding:0 20px;font:inherit;font-size:15px;font-weight:800;cursor:pointer;transition:filter .15s, transform .05s, opacity .15s}
+.btn:active{transform:translateY(1px)}
+.btn:hover{filter:brightness(1.08)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.primary{background:#5da2ff;color:#06142b}
+.btn.go{background:#6fdc9a;color:#062414}
+.btn.warm{background:#ffc86b;color:#2a1d05}
+.btn.light{background:#fff;color:#13243f}
+.btn.ghost{background:rgba(255,255,255,.1);color:#fff}
+.btn.block{width:100%}
+
+/* Карточка заявки */
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:800;padding:5px 11px;border-radius:999px;background:color-mix(in srgb, var(--s) 20%, transparent);color:var(--s);border:1px solid color-mix(in srgb, var(--s) 55%, transparent)}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--s)}
+.s-new{--s:var(--st-new)} .s-work{--s:var(--st-work)} .s-done{--s:var(--st-done)} .s-closed{--s:var(--st-closed)}
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.tiles>div{background:#fff;border-radius:12px;padding:11px 13px;color:#13243f;min-width:0}
+.tiles small{display:block;color:#5d6e86;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-bottom:3px}
+.tiles b{font-size:14px;overflow-wrap:anywhere}
+.tags{display:flex;flex-wrap:wrap;gap:8px}
+.tag{font-size:13px;font-weight:700;padding:6px 11px;border-radius:9px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18)}
+details{background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:12px 14px}
+summary{cursor:pointer;font-weight:700}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#fff;color:#13243f;padding:14px 16px;border-radius:11px;margin:12px 0 0;font:14px/1.55 "Manrope",-apple-system,"Segoe UI",Arial,sans-serif;max-height:420px;overflow:auto}
+.notice{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);padding:12px 14px;border-radius:11px;font-size:14px;line-height:1.5}
+.files{display:flex;flex-wrap:wrap;gap:8px}
+.filebtn{display:inline-flex;align-items:center;gap:8px;background:#fff;color:#13243f;border-radius:10px;padding:9px 13px;font-weight:700;font-size:13px;text-decoration:none;cursor:pointer;border:0;font-family:inherit}
+.muted{color:var(--muted);font-size:14px}
+.resultlist{margin:0;padding-left:20px;display:grid;gap:4px}
+.resultlist a{color:#a9d4ff;overflow-wrap:anywhere}
+
+/* Мои заявки */
+#myList{grid-template-columns:minmax(0,1fr)}
+.listitem{min-width:0;display:flex;align-items:center;gap:14px;width:100%;text-align:left;background:var(--tint);border:1px solid rgba(140,190,255,.2);border-radius:14px;padding:14px 16px;color:var(--ink);font:inherit;cursor:pointer}
+.listitem:hover{border-color:rgba(140,190,255,.45)}
+.listitem .pill{flex:0 0 auto}
+.listitem .n{font-weight:800;color:var(--muted);font-size:13px;min-width:38px}
+.listitem .t{flex:1;min-width:0}
+.listitem .t b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.listitem .t small{color:var(--muted)}
+.empty{text-align:center;padding:30px 10px;color:var(--muted)}
+
+/* Экран «готово» */
+.done{text-align:center;padding:36px 22px}
+.done .big{width:76px;height:76px;margin:0 auto 16px;border-radius:50%;display:grid;place-items:center;background:#6fdc9a;color:#062414;font-size:38px;font-weight:800}
+.done h2{margin:0 0 8px;font-size:23px}
+.done p{margin:0 auto 20px;color:#cfdcf3;max-width:420px}
+
+.loader{padding:40px;text-align:center;color:var(--muted)}
+.footer{font-size:12px;color:#9fb1cf;text-align:center;margin-top:18px}
+
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+@media (max-width:640px){
+  .hero{padding:18px;gap:14px}
+  .logo{width:58px;height:58px;border-radius:13px}
+  h1{font-size:21px}
+  .card{padding:18px 16px 20px 20px}
+  .grid,.optiongrid,.timingrow{grid-template-columns:1fr}
+  .tiles{grid-template-columns:1fr 1fr}
+  .listitem{flex-wrap:wrap;gap:6px 12px}
+  .listitem .n{min-width:0}
+  .actions{padding:12px}
+  .status{width:100%;margin:0 0 2px}
+  .actions .btn{flex:1}
+}
+</style>
+</head>
+<body>
+<main class="shell">
+
+  <div class="demo" id="demo" hidden>
+    <b>Демо-просмотр: данные никуда не отправляются</b>
+    <button type="button" data-go="form">Форма</button>
+    <button type="button" data-go="card">Карточка</button>
+    <button type="button" data-go="my">Мои заявки</button>
+  </div>
+
+  <header class="hero">
+    <div class="logo"><span class="ph">Логотип</span></div>
+    <div class="hero-text">
+      <span class="badge" id="heroBadge">Бриф для пресс-центра</span>
+      <h1 id="heroTitle">Заявка на размещение в СМИ</h1>
+      <p id="heroSub">Заполнение займёт 5–7 минут. Поля со звёздочкой обязательны.</p>
+    </div>
+  </header>
+
+  <!-- ============ ЭКРАН 1. НОВАЯ ЗАЯВКА ============ -->
+  <section id="scr-form" hidden>
+    <form id="form" class="stackcards" novalidate>
+      <section class="card c1">
+        <div class="cardhead"><div class="num">1</div><h2>Проект</h2></div>
+        <div class="stack">
+          <div class="grid">
+            <div class="field">
+              <label class="caption" for="project">Название проекта <span class="req">*</span></label>
+              <input id="project" required placeholder="Например, Познавательный марафон">
+            </div>
+            <div class="field">
+              <label class="caption" for="manager">Контакт для связи <span class="req">*</span></label>
+              <input id="manager" required placeholder="Имя, Telegram или телефон">
+            </div>
+          </div>
+          <div class="field">
+            <label class="caption">Цель публикации <span class="req">*</span></label>
+            <div class="optiongrid">
+              <label class="option"><input type="radio" name="goal" value="Для отчёта" required><span><strong>Для отчёта</strong><small>Нужно выполнить требования ТЗ или договора</small></span></label>
+              <label class="option"><input type="radio" name="goal" value="Для привлечения аудитории"><span><strong>Для привлечения аудитории</strong><small>Нужны переходы, регистрации, охват</small></span></label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card c2">
+        <div class="cardhead"><div class="num">2</div><h2>Когда разместить</h2></div>
+        <div class="timingrow">
+          <div class="field">
+            <label class="caption">Срочность <span class="req">*</span></label>
+            <div class="optiongrid">
+              <label class="option"><input type="radio" name="priority" value="Срочно" required><span><strong>Срочно</strong></span></label>
+              <label class="option"><input type="radio" name="priority" value="К определённой дате"><span><strong>К дате</strong></span></label>
+            </div>
+          </div>
+          <div class="field">
+            <label class="caption" for="deadline">Крайний срок <span class="req">*</span></label>
+            <input id="deadline" type="text" required placeholder="23 октября, до 18:00">
+          </div>
+          <div class="field">
+            <label class="caption" for="quantity">Размещений <span class="req">*</span></label>
+            <input id="quantity" type="number" min="1" value="1" required inputmode="numeric">
+          </div>
+        </div>
+      </section>
+
+      <section class="card c3">
+        <div class="cardhead"><div class="num">3</div><h2>Какие СМИ подойдут</h2></div>
+        <div class="stack">
+          <div class="field">
+            <label class="caption">Тип СМИ <span class="req">*</span></label>
+            <div class="optiongrid">
+              <label class="option"><input type="checkbox" name="mediaType" value="Федеральные"><span><strong>Федеральные</strong></span></label>
+              <label class="option"><input type="checkbox" name="mediaType" value="Региональные"><span><strong>Региональные</strong></span></label>
+            </div>
+          </div>
+          <div class="field">
+            <label class="caption">Способ размещения <span class="req">*</span></label>
+            <div class="optiongrid">
+              <label class="option"><input type="radio" name="payment" value="Бесплатное" required><span><strong>Бесплатное</strong><small>Редакционное размещение</small></span></label>
+              <label class="option"><input type="radio" name="payment" value="Платное"><span><strong>Платное</strong><small>Размещение на коммерческой основе</small></span></label>
+            </div>
+          </div>
+          <div class="field">
+            <label class="caption" for="tz">Выдержка из ТЗ (дословно) <span class="req">*</span></label>
+            <textarea id="tz" required placeholder="Вставьте точную выдержку из ТЗ, относящуюся к публикации в СМИ"></textarea>
+          </div>
+          <div class="field">
+            <label class="caption" for="requirements">Требования к СМИ <span class="req">*</span></label>
+            <textarea id="requirements" required placeholder="Например: регистрация СМИ, федеральный статус, посещаемость, тематика"></textarea>
+          </div>
+        </div>
+      </section>
+
+      <section class="card c4">
+        <div class="cardhead"><div class="num">4</div><h2>Текст и файлы</h2></div>
+        <div class="stack">
+          <div class="field">
+            <label class="caption" for="fulltext">Текст публикации <span class="req">*</span></label>
+            <textarea id="fulltext" required placeholder="Вставьте полный текст" style="min-height:160px"></textarea>
+          </div>
+          <div class="grid">
+            <div class="field">
+              <label class="caption" for="photo">Фото</label>
+              <div class="upload"><input id="photo" type="file" accept="image/*" multiple></div>
+              <div class="filehint" id="photoinfo"></div>
+            </div>
+            <div class="field">
+              <label class="caption" for="banner">Баннер</label>
+              <div class="upload"><input id="banner" type="file" accept="image/*"></div>
+              <div class="filehint" id="bannerinfo"></div>
+            </div>
+          </div>
+          <div class="field">
+            <label class="caption">Можно ли менять текст <span class="req">*</span></label>
+            <div class="optiongrid">
+              <label class="option"><input type="radio" name="editing" value="Можно адаптировать" required><span><strong>Можно адаптировать</strong></span></label>
+              <label class="option"><input type="radio" name="editing" value="Менять нельзя"><span><strong>Менять нельзя</strong></span></label>
+            </div>
+          </div>
+          <div class="field">
+            <label class="caption" for="keep">Что обязательно сохранить</label>
+            <textarea id="keep" placeholder="Например: заголовок, цитаты, ссылки, названия организаций"></textarea>
+          </div>
+        </div>
+      </section>
+
+      <section class="card c5">
+        <div class="cardhead"><div class="num">5</div><h2>Результат</h2></div>
+        <div class="field">
+          <label class="caption">Что нужно получить <span class="req">*</span></label>
+          <div class="optiongrid">
+            <label class="option"><input type="checkbox" name="result" value="Ссылки на публикации" checked><span><strong>Ссылки на публикации</strong></span></label>
+            <label class="option"><input type="checkbox" name="result" value="Скриншоты"><span><strong>Скриншоты</strong></span></label>
+            <label class="option"><input type="checkbox" name="result" value="Охват"><span><strong>Охват</strong></span></label>
+            <label class="option"><input type="checkbox" name="result" value="Просмотры"><span><strong>Просмотры</strong></span></label>
+          </div>
+        </div>
+      </section>
+    </form>
+
+    <div class="actions">
+      <div class="status" id="formStatus">Заявка сразу уйдёт в пресс-центр</div>
+      <button class="btn primary" type="button" id="sendBtn">Отправить в пресс-центр</button>
+    </div>
+  </section>
+
+  <!-- ============ ЭКРАН 2. ОТПРАВЛЕНО ============ -->
+  <section id="scr-done" hidden>
+    <div class="card c6 done">
+      <div class="big">✓</div>
+      <h2 id="doneTitle">Заявка отправлена</h2>
+      <p id="doneText">Пресс-центр уже получил её. Бот напишет вам, когда заявку возьмут в работу и когда появятся ссылки.</p>
+      <div style="display:grid;gap:10px;max-width:320px;margin:0 auto">
+        <button class="btn light" type="button" id="doneClose">Закрыть</button>
+        <button class="btn ghost" type="button" id="doneNew">Отправить ещё одну</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ЭКРАН 3. КАРТОЧКА ЗАЯВКИ ============ -->
+  <section id="scr-card" hidden>
+    <div id="cardBody" class="stackcards"><div class="loader">Загружаем заявку…</div></div>
+  </section>
+
+  <!-- ============ ЭКРАН 4. МОИ ЗАЯВКИ ============ -->
+  <section id="scr-my" hidden>
+    <div class="card c1">
+      <div class="cardhead"><div class="num">≡</div><h2>Мои заявки</h2></div>
+      <div id="myList" class="stack" style="gap:10px"><div class="loader">Загружаем…</div></div>
+    </div>
+    <div class="actions">
+      <div class="status">Нажмите на заявку, чтобы открыть карточку</div>
+      <button class="btn primary" type="button" id="myNew">Новая заявка</button>
+    </div>
+  </section>
+
+  <div class="footer">Пресс-центр · заявки на размещение в СМИ</div>
+</main>
+
+<script src="config.js"></script>
+<script>
+/* Адрес сервера (Apps Script /exec) задаётся в файле config.js */
+const API_URL = window.PRESS_API_URL || '';
+
+const MAX_FILE_MB = 15;
+const tg = window.Telegram && window.Telegram.WebApp;
+const DEMO = !(tg && tg.initData);
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+if (tg) {
+  try { tg.ready(); tg.expand(); tg.setHeaderColor('#0b1730'); tg.setBackgroundColor('#0b1730'); } catch (e) {}
+}
+const haptic = type => { try { tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred(type); } catch (e) {} };
+const openLink = url => { if (tg && tg.openLink && !DEMO) tg.openLink(url); else window.open(url, '_blank', 'noopener'); };
+
+/* ---------- Маршрут: что открыть ---------- */
+const qs = new URLSearchParams(location.search);
+const startParam = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || '';
+function initialRoute() {
+  if (/^c\d+$/.test(startParam)) return { screen: 'card', id: startParam.slice(1) };
+  if (startParam === 'my' || qs.get('screen') === 'my') return { screen: 'my' };
+  if (qs.get('id')) return { screen: 'card', id: qs.get('id') };
+  return { screen: 'form' };
+}
+
+const SCREENS = ['form', 'done', 'card', 'my'];
+function show(name) {
+  SCREENS.forEach(s => $('scr-' + s).hidden = s !== name);
+  document.querySelectorAll('.demo button').forEach(b => b.classList.toggle('on', b.dataset.go === name));
+  if (tg && tg.BackButton) {
+    if (name === 'card' && history.length > 0 && cameFromList) tg.BackButton.show(); else tg.BackButton.hide();
+  }
+  window.scrollTo(0, 0);
+}
+function setHero(badge, title, sub) { $('heroBadge').textContent = badge; $('heroTitle').textContent = title; $('heroSub').textContent = sub; }
+let cameFromList = false;
+if (tg && tg.BackButton) tg.BackButton.onClick(() => { cameFromList = false; openMy(); });
+
+/* ---------- Связь с сервером ---------- */
+async function api(action, payload = {}) {
+  if (DEMO) return mockApi(action, payload);
+  const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action, initData: tg.initData, ...payload }) });
+  let j; try { j = await res.json(); } catch (e) { throw new Error('Сервер не ответил. Попробуйте ещё раз'); }
+  if (!j.ok) throw new Error(j.error || 'Что-то пошло не так');
+  return j;
+}
+
+/* ---------- Файлы → base64 ---------- */
+function readFiles(input) {
+  const list = Array.from(input.files || []);
+  return Promise.all(list.map(f => new Promise((ok, fail) => {
+    if (f.size > MAX_FILE_MB * 1024 * 1024) return fail(new Error(`Файл «${f.name}» больше ${MAX_FILE_MB} МБ`));
+    const r = new FileReader();
+    r.onload = () => ok({ name: f.name, type: f.type || 'application/octet-stream', data: String(r.result).split(',')[1] });
+    r.onerror = () => fail(new Error('Не удалось прочитать файл ' + f.name));
+    r.readAsDataURL(f);
+  })));
+}
+function bindFileHint(inputId, hintId) {
+  $(inputId).addEventListener('change', () => {
+    const files = Array.from($(inputId).files);
+    $(hintId).textContent = files.map(f => `${f.name} · ${(f.size / 1048576).toFixed(1)} МБ`).join(', ');
+  });
+}
+bindFileHint('photo', 'photoinfo');
+bindFileHint('banner', 'bannerinfo');
+
+/* ================== ФОРМА ЗАЯВКИ ================== */
+const form = $('form');
+const checked = name => Array.from(document.querySelectorAll(`input[name="${name}"]:checked`)).map(i => i.value);
+const val = id => ($(id).value || '').trim();
+
+function formError(text, el) {
+  $('formStatus').textContent = text; $('formStatus').classList.add('err');
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  haptic('error');
+  return false;
+}
+function validate() {
+  $('formStatus').classList.remove('err');
+  const bad = form.querySelector(':invalid');
+  if (bad) { bad.focus({ preventScroll: true }); return formError('Заполните обязательные поля', bad); }
+  if (!checked('mediaType').length) return formError('Отметьте хотя бы один тип СМИ', document.querySelector('input[name="mediaType"]'));
+  if (!checked('result').length) return formError('Отметьте, что нужно получить в результате', document.querySelector('input[name="result"]'));
+  return true;
+}
+function collect() {
+  return {
+    project: val('project'), manager: val('manager'), goal: checked('goal')[0] || '',
+    priority: checked('priority')[0] || '', deadline: val('deadline'), quantity: val('quantity'),
+    mediaType: checked('mediaType'), payment: checked('payment')[0] || '',
+    tz: val('tz'), requirements: val('requirements'), fulltext: val('fulltext'),
+    editing: checked('editing')[0] || '', keep: val('keep'), result: checked('result')
+  };
+}
+
+$('sendBtn').addEventListener('click', async () => {
+  if (!validate()) return;
+  const btn = $('sendBtn');
+  btn.disabled = true; btn.textContent = 'Отправляем…';
+  $('formStatus').classList.remove('err'); $('formStatus').textContent = 'Загружаем файлы и отправляем заявку';
+  try {
+    const photos = await readFiles($('photo'));
+    const banners = await readFiles($('banner'));
+    const r = await api('submit', { data: collect(), files: { photos, banners } });
+    haptic('success');
+    $('doneTitle').textContent = `Заявка №${r.id} отправлена`;
+    setHero('Готово', 'Заявка в пресс-центре', 'Ответ придёт в этот чат с ботом.');
+    show('done');
+  } catch (e) {
+    formError(e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Отправить в пресс-центр';
+  }
+});
+$('doneClose').addEventListener('click', () => { if (tg && !DEMO) tg.close(); else openForm(true); });
+$('doneNew').addEventListener('click', () => openForm(true));
+
+function openForm(reset) {
+  if (reset) { form.reset(); $('photoinfo').textContent = ''; $('bannerinfo').textContent = ''; $('formStatus').textContent = 'Заявка сразу уйдёт в пресс-центр'; $('formStatus').classList.remove('err'); }
+  setHero('Бриф для пресс-центра', 'Заявка на размещение в СМИ', 'Заполнение займёт 5–7 минут. Поля со звёздочкой обязательны.');
+  show('form');
+}
+
+/* ================== КАРТОЧКА ЗАЯВКИ ================== */
+const STATUS_CLASS = { 'Новая': 's-new', 'В работе': 's-work', 'Размещено': 's-done', 'Закрыто': 's-closed' };
+const pill = s => `<span class="pill ${STATUS_CLASS[s] || 's-new'}">${esc(s)}</span>`;
+const linesToList = txt => String(txt || '').split(/\n+/).map(s => s.trim()).filter(Boolean);
+const linkify = s => /^https?:\/\//i.test(s) ? `<a href="${esc(s)}" data-ext="1">${esc(s)}</a>` : esc(s);
+
+let current = null;
+
+async function openCard(id) {
+  show('card');
+  setHero('Пресс-центр · заявка', 'Заявка №' + id, 'Загружаем…');
+  $('cardBody').innerHTML = '<div class="loader">Загружаем заявку…</div>';
+  try {
+    const r = await api('get', { id });
+    current = r.item;
+    renderCard();
+  } catch (e) {
+    $('cardBody').innerHTML = `<div class="card c1"><div class="empty">${esc(e.message)}</div></div>`;
+    setHero('Пресс-центр · заявка', 'Заявка №' + id, 'Не удалось открыть');
+  }
+}
+
+function renderCard() {
+  const d = current;
+  setHero('Пресс-центр · заявка №' + d.id, d.project || 'Без названия', `Создана ${d.created} · ${d.manager_name || ''}`);
+  const wanted = linesToList(String(d.result_wanted || '').replace(/,\s*/g, '\n'));
+  const wantReach = /Охват|Просмотры/.test(d.result_wanted || '');
+  const wantShots = /Скриншот/.test(d.result_wanted || '');
+  const photos = linesToList(d.photo), banners = linesToList(d.banner);
+  const fileBtns = [...photos.map((u, i) => [u, 'Фото ' + (photos.length > 1 ? i + 1 : '')]), ...banners.map(u => [u, 'Баннер'])]
+    .map(([u, t]) => `<button type="button" class="filebtn" data-url="${esc(u)}">⬇ ${esc(t.trim())}</button>`).join('');
+
+  let html = `
+  <section class="card c1">
+    <div class="cardhead"><div class="num">1</div><h2>Главное</h2><span style="margin-left:auto">${pill(d.status)}</span></div>
+    <div class="stack">
+      <div class="tiles">
+        <div><small>Менеджер</small><b>${esc(d.contact || d.manager_name)}</b></div>
+        <div><small>Срочность</small><b>${esc(d.priority)}</b></div>
+        <div><small>Крайний срок</small><b>${esc(d.deadline)}</b></div>
+        <div><small>Размещений</small><b>${esc(d.quantity)}</b></div>
+        <div><small>Тип СМИ</small><b>${esc(d.media)}</b></div>
+        <div><small>Размещение</small><b>${esc(d.payment)}</b></div>
+      </div>
+      <div class="tags"><span class="tag">Цель: ${esc(d.goal)}</span><span class="tag">Нужно: ${esc(d.result_wanted)}</span>${d.executor_name ? `<span class="tag">Исполнитель: ${esc(d.executor_name)}</span>` : ''}</div>
+    </div>
+  </section>
+
+  <section class="card c3">
+    <div class="cardhead"><div class="num">2</div><h2>Условия размещения</h2></div>
+    <div class="stack" style="gap:10px">
+      <details open><summary>Выдержка из ТЗ</summary><pre>${esc(d.tz)}</pre></details>
+      <details><summary>Требования к СМИ</summary><pre>${esc(d.requirements)}</pre></details>
+    </div>
+  </section>
+
+  <section class="card c4">
+    <div class="cardhead"><div class="num">3</div><h2>Текст и файлы</h2></div>
+    <div class="stack" style="gap:12px">
+      <details><summary>Полный текст публикации</summary><pre id="ftext">${esc(d.fulltext)}</pre>
+        <button class="btn light" type="button" id="copyText" style="margin-top:10px">Скопировать текст</button></details>
+      ${fileBtns ? `<div class="files">${fileBtns}</div>` : '<div class="muted">Фото и баннер не прикреплены.</div>'}
+      <div class="notice">Текст: <b>${esc(d.editing)}</b>${d.keep ? `<br>Обязательно сохранить: ${esc(d.keep)}` : ''}</div>
+    </div>
+  </section>`;
+
+  // Блок результата (если уже сдан)
+  const hasResult = d.links || d.reach || d.screens || d.notes;
+  if (hasResult) {
+    html += `
+  <section class="card c6">
+    <div class="cardhead"><div class="num">✓</div><h2>Результат</h2></div>
+    <div class="stack" style="gap:12px">
+      ${d.links ? `<div><label class="caption">Ссылки на публикации</label><ol class="resultlist">${linesToList(d.links).map(l => `<li>${linkify(l)}</li>`).join('')}</ol></div>` : ''}
+      ${d.reach ? `<div><label class="caption">Охват и просмотры</label><div class="notice">${esc(d.reach)}</div></div>` : ''}
+      ${d.screens ? `<div><label class="caption">Скриншоты</label><div class="files">${linesToList(d.screens).map((u, i) => /^https?:/.test(u) ? `<button type="button" class="filebtn" data-url="${esc(u)}">🖼 Скриншот ${i + 1}</button>` : `<span class="tag">${esc(u)}</span>`).join('')}</div></div>` : ''}
+      ${d.notes ? `<div><label class="caption">Комментарий исполнителя</label><div class="notice">${esc(d.notes)}</div></div>` : ''}
+    </div>
+  </section>`;
+  }
+
+  // Действия в зависимости от роли и статуса
+  if (d.role === 'executor' && d.status === 'Новая') {
+    html += `
+  <div class="actions"><div class="status" id="cardStatus">Возьмите заявку — менеджер сразу получит уведомление</div>
+    <button class="btn warm" type="button" id="takeBtn">Взять в работу</button></div>`;
+  } else if (d.role === 'executor' && (d.status === 'В работе' || d.status === 'Размещено') && d.is_mine) {
+    html += `
+  <section class="card c5">
+    <div class="cardhead"><div class="num">4</div><h2>${d.status === 'Размещено' ? 'Обновить результат' : 'Сдать результат'}</h2></div>
+    <div class="stack">
+      <div class="field"><label class="caption" for="r-links">Ссылки на публикации <span class="req">*</span></label>
+        <textarea id="r-links" placeholder="Каждая ссылка с новой строки&#10;https://...">${esc(d.links)}</textarea></div>
+      ${wantReach || d.reach ? `<div class="field"><label class="caption" for="r-reach">Охват и просмотры</label>
+        <textarea id="r-reach" style="min-height:72px" placeholder="Например: 12 400 просмотров, источник — статистика редакции">${esc(d.reach)}</textarea></div>` : ''}
+      ${wantShots ? `<div class="field"><label class="caption" for="r-shots">Скриншоты</label>
+        <div class="upload"><input id="r-shots" type="file" accept="image/*" multiple></div><div class="filehint" id="r-shotsinfo"></div></div>` : ''}
+      <div class="field"><label class="caption" for="r-notes">Комментарий для менеджера</label>
+        <textarea id="r-notes" style="min-height:72px" placeholder="Что важно знать: даты выхода, договорённости">${esc(d.notes)}</textarea></div>
+      <div class="notice">Менеджер ждёт: <b>${esc(wanted.join(', '))}</b></div>
+    </div>
+  </section>
+  <div class="actions"><div class="status" id="cardStatus">Результат сразу придёт менеджеру в Telegram</div>
+    <button class="btn go" type="button" id="resultBtn">Отправить менеджеру</button></div>`;
+  } else if (d.role === 'executor' && d.status === 'В работе' && !d.is_mine) {
+    html += `<div class="actions"><div class="status">Заявку уже взял(а) ${esc(d.executor_name)}</div></div>`;
+  } else if (d.role === 'manager' && d.status === 'Размещено') {
+    html += `
+  <div class="actions"><div class="status" id="cardStatus">Всё в порядке? Закройте заявку</div>
+    <button class="btn go" type="button" id="acceptBtn">Принять результат</button></div>`;
+  } else if (d.role === 'manager') {
+    const txt = { 'Новая': 'Ждёт, когда пресс-центр возьмёт её в работу', 'В работе': 'Пресс-центр работает над заявкой', 'Закрыто': 'Заявка закрыта' }[d.status] || '';
+    html += `<div class="actions"><div class="status">${esc(txt)}</div><button class="btn ghost" type="button" id="toMy">Все мои заявки</button></div>`;
+  }
+
+  $('cardBody').innerHTML = html;
+  bindCard();
+}
+
+function bindCard() {
+  document.querySelectorAll('[data-url]').forEach(b => b.addEventListener('click', () => openLink(b.dataset.url)));
+  document.querySelectorAll('a[data-ext]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); openLink(a.href); }));
+  const copy = $('copyText');
+  if (copy) copy.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(current.fulltext); copy.textContent = 'Скопировано'; haptic('success'); }
+    catch (e) { const r = document.createRange(); r.selectNodeContents($('ftext')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); copy.textContent = 'Текст выделен — скопируйте'; }
+  });
+  if ($('r-shots')) bindFileHint('r-shots', 'r-shotsinfo');
+  if ($('toMy')) $('toMy').addEventListener('click', openMy);
+
+  const busy = (btn, text) => { btn.disabled = true; btn.dataset.t = btn.textContent; btn.textContent = text; };
+  const free = btn => { btn.disabled = false; btn.textContent = btn.dataset.t; };
+  const fail = msg => { const s = $('cardStatus'); if (s) { s.textContent = msg; s.classList.add('err'); } haptic('error'); };
+
+  if ($('takeBtn')) $('takeBtn').addEventListener('click', async e => {
+    const b = e.currentTarget; busy(b, 'Берём…');
+    try { const r = await api('take', { id: current.id }); current = r.item; haptic('success'); renderCard(); }
+    catch (err) { free(b); fail(err.message); }
+  });
+  if ($('resultBtn')) $('resultBtn').addEventListener('click', async e => {
+    const b = e.currentTarget;
+    const links = val('r-links');
+    if (!links) { fail('Добавьте хотя бы одну ссылку'); $('r-links').focus(); return; }
+    busy(b, 'Отправляем…');
+    try {
+      const shots = $('r-shots') ? await readFiles($('r-shots')) : [];
+      const r = await api('result', { id: current.id, data: { links, reach: $('r-reach') ? val('r-reach') : '', notes: val('r-notes') }, files: { shots } });
+      current = r.item; haptic('success'); renderCard();
+      const s = $('cardStatus'); if (s) s.textContent = 'Отправлено менеджеру ✓';
+    } catch (err) { free(b); fail(err.message); }
+  });
+  if ($('acceptBtn')) $('acceptBtn').addEventListener('click', async e => {
+    const b = e.currentTarget; busy(b, 'Закрываем…');
+    try { const r = await api('accept', { id: current.id }); current = r.item; haptic('success'); renderCard(); }
+    catch (err) { free(b); fail(err.message); }
+  });
+}
+
+/* ================== МОИ ЗАЯВКИ ================== */
+async function openMy() {
+  show('my');
+  setHero('Пресс-центр', 'Мои заявки', 'Отправленные вами и взятые вами в работу');
+  $('myList').innerHTML = '<div class="loader">Загружаем…</div>';
+  try {
+    const r = await api('my');
+    if (!r.items.length) { $('myList').innerHTML = '<div class="empty">Заявок пока нет. Нажмите «Новая заявка».</div>'; return; }
+    $('myList').innerHTML = r.items.map(it => `
+      <button type="button" class="listitem" data-id="${esc(it.id)}">
+        <span class="n">№${esc(it.id)}</span>
+        <span class="t"><b>${esc(it.project)}</b><small>${esc(it.role === 'executor' ? 'Вы исполнитель' : 'Вы менеджер')} · срок: ${esc(it.deadline)}</small></span>
+        ${pill(it.status)}
+      </button>`).join('');
+    document.querySelectorAll('.listitem').forEach(b => b.addEventListener('click', () => { cameFromList = true; openCard(b.dataset.id); }));
+  } catch (e) {
+    $('myList').innerHTML = `<div class="empty">${esc(e.message)}</div>`;
+  }
+}
+$('myNew').addEventListener('click', () => openForm(true));
+
+/* ================== ДЕМО-РЕЖИМ (вне Telegram) ================== */
+const demoItem = {
+  id: 12, created: '21.10.2026 14:05', status: 'Новая', role: 'executor', is_mine: false,
+  manager_name: 'Евгений', contact: 'Евгений, @evgeny', project: 'Познавательный марафон',
+  goal: 'Для отчёта', priority: 'К определённой дате', deadline: '23 октября, до 18:00', quantity: '2',
+  media: 'Федеральные, Региональные', payment: 'Бесплатное',
+  tz: 'Обеспечить не менее двух публикаций о проекте в СМИ, зарегистрированных в Роскомнадзоре.',
+  requirements: 'Регистрация СМИ, образовательная тематика.',
+  fulltext: 'Стартовал Познавательный марафон для школьников…\n\nПолный текст публикации появится здесь.',
+  photo: '', banner: '', editing: 'Можно адаптировать', keep: 'Название проекта и ссылку на регистрацию',
+  result_wanted: 'Ссылки на публикации, Скриншоты, Охват', executor_name: '',
+  links: '', reach: '', screens: '', notes: ''
+};
+async function mockApi(action, p) {
+  await new Promise(r => setTimeout(r, 450));
+  if (action === 'submit') return { ok: true, id: 13 };
+  if (action === 'get') return { ok: true, item: demoItem };
+  if (action === 'take') { Object.assign(demoItem, { status: 'В работе', executor_name: 'Анна (пресс-центр)', is_mine: true }); return { ok: true, item: demoItem }; }
+  if (action === 'result') { Object.assign(demoItem, p.data, { status: 'Размещено', screens: (p.files.shots || []).map(f => f.name).join('\n') }); return { ok: true, item: demoItem }; }
+  if (action === 'accept') { demoItem.status = 'Закрыто'; return { ok: true, item: demoItem }; }
+  if (action === 'my') return { ok: true, items: [
+    { id: 12, project: 'Познавательный марафон', status: demoItem.status, deadline: '23 октября', role: 'executor' },
+    { id: 9, project: 'Форум преподавателей РКИ', status: 'Размещено', deadline: '15 октября', role: 'manager' },
+    { id: 7, project: 'Летняя школа', status: 'Закрыто', deadline: '1 октября', role: 'manager' }
+  ] };
+  return { ok: false, error: 'Неизвестное действие' };
+}
+if (DEMO) {
+  $('demo').hidden = false;
+  document.querySelectorAll('.demo button').forEach(b => b.addEventListener('click', () => {
+    const go = b.dataset.go;
+    if (go === 'form') openForm(false); else if (go === 'card') openCard(12); else openMy();
+  }));
+}
+
+/* ---------- Старт ---------- */
+const r0 = initialRoute();
+if (r0.screen === 'card') openCard(r0.id);
+else if (r0.screen === 'my') openMy();
+else openForm(false);
+</script>
+</body>
+</html>

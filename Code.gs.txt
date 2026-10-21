@@ -1,0 +1,440 @@
+/**
+ * Бот пресс-центра: заявки на размещение в СМИ.
+ * Google Таблица хранит заявки, Google Диск — файлы, Telegram-бот рассылает уведомления.
+ *
+ * Свойства скрипта (Настройки проекта → Свойства скрипта):
+ *   BOT_TOKEN       — токен бота от @BotFather            (вставляете вы)
+ *   MINIAPP_URL     — адрес мини-приложения (index.html)  (вставляете вы)
+ *   BOT_USERNAME    — имя бота без @, например press_center_bot
+ *   APP_SHORT_NAME  — короткое имя мини-приложения из /newapp, например brief
+ *   WEBAPP_URL      — адрес этого скрипта после развёртывания (…/exec)
+ *   GROUP_CHAT_ID   — заполнится сам, когда в чате пресс-центра напишут /bind
+ *   SHEET_ID, FOLDER_ID, LAST_ID — заполняются автоматически функцией setup()
+ */
+
+const P = PropertiesService.getScriptProperties();
+const DEFAULTS = {
+  MINIAPP_URL: 'https://pressantonov2013-jpg.github.io/press-bot/',
+  APP_SHORT_NAME: 'brief'
+};
+const prop = k => P.getProperty(k) || DEFAULTS[k] || '';
+
+const COLS = [
+  ['id', '№'], ['created', 'Создана'], ['status', 'Статус'],
+  ['manager_id', 'TG id менеджера'], ['manager_name', 'Менеджер'], ['manager_username', 'Username менеджера'],
+  ['project', 'Проект'], ['contact', 'Контакт'], ['goal', 'Цель'], ['priority', 'Срочность'],
+  ['deadline', 'Крайний срок'], ['quantity', 'Размещений'], ['media', 'Тип СМИ'], ['payment', 'Способ'],
+  ['tz', 'Выдержка из ТЗ'], ['requirements', 'Требования к СМИ'], ['fulltext', 'Текст публикации'],
+  ['photo', 'Фото'], ['banner', 'Баннер'], ['editing', 'Можно менять текст'], ['keep', 'Сохранить'],
+  ['result_wanted', 'Нужно получить'],
+  ['executor_id', 'TG id исполнителя'], ['executor_name', 'Исполнитель'], ['taken_at', 'Взята в работу'],
+  ['links', 'Ссылки'], ['reach', 'Охват/просмотры'], ['screens', 'Скриншоты'], ['notes', 'Комментарий'],
+  ['done_at', 'Сдана'], ['closed_at', 'Закрыта'], ['group_msg_id', 'ID сообщения в чате']
+];
+const KEYS = COLS.map(c => c[0]);
+const TZ = 'Europe/Moscow';
+const now = () => Utilities.formatDate(new Date(), TZ, 'dd.MM.yyyy HH:mm');
+
+/* ======================= НАСТРОЙКА ======================= */
+
+/** Запустите один раз вручную: создаст таблицу и папку на Диске. */
+function setup() {
+  if (!prop('SHEET_ID')) {
+    const ss = SpreadsheetApp.create('Пресс-центр — заявки');
+    const sh = ss.getSheets()[0];
+    sh.setName('Заявки');
+    sh.getRange(1, 1, 1, COLS.length).setValues([COLS.map(c => c[1])]).setFontWeight('bold').setBackground('#dbe7fb');
+    sh.getRange(1, 1, 1000, COLS.length).setNumberFormat('@'); // всё храним как текст
+    sh.setFrozenRows(1);
+    P.setProperty('SHEET_ID', ss.getId());
+    Logger.log('Таблица: ' + ss.getUrl());
+  }
+  if (!prop('FOLDER_ID')) {
+    const f = DriveApp.createFolder('Пресс-центр — файлы заявок');
+    P.setProperty('FOLDER_ID', f.getId());
+    Logger.log('Папка: ' + f.getUrl());
+  }
+  if (!prop('LAST_ID')) P.setProperty('LAST_ID', '0');
+  Logger.log('Готово. Теперь разверните скрипт как веб-приложение и запустите connectBot().');
+}
+
+/** Запустите после развёртывания: подключит вебхук и кнопку меню бота. */
+function connectBot() {
+  if (!prop('BOT_TOKEN')) throw new Error('Не заполнено свойство BOT_TOKEN');
+  if (!prop('WEBAPP_URL')) P.setProperty('WEBAPP_URL', ScriptApp.getService().getUrl());
+  const me = tg('getMe', {});
+  if (!me.ok) throw new Error('Telegram не принял токен: ' + JSON.stringify(me));
+  P.setProperty('BOT_USERNAME', me.result.username);
+  Logger.log('Бот: @' + me.result.username + ' · вебхук: ' + prop('WEBAPP_URL'));
+  Logger.log(JSON.stringify(tg('setWebhook', {
+    url: prop('WEBAPP_URL'), allowed_updates: ['message', 'callback_query'], drop_pending_updates: true
+  })));
+  Logger.log(JSON.stringify(tg('setChatMenuButton', {
+    menu_button: { type: 'web_app', text: 'Заявка', web_app: { url: prop('MINIAPP_URL') } }
+  })));
+  Logger.log(JSON.stringify(tg('setMyCommands', { commands: [
+    { command: 'start', description: 'Новая заявка' },
+    { command: 'my', description: 'Мои заявки' }
+  ] })));
+}
+
+/** Проверка: что видит Telegram на стороне вебхука. */
+function webhookInfo() { Logger.log(JSON.stringify(tg('getWebhookInfo', {}), null, 2)); }
+
+/* ======================= ВХОДНЫЕ ТОЧКИ ======================= */
+
+function doGet() { return ContentService.createTextOutput('Бот пресс-центра работает'); }
+
+function doPost(e) {
+  let body = {};
+  try { body = JSON.parse(e.postData.contents); } catch (_) {}
+
+  // Обновления от Telegram
+  if (body.update_id !== undefined) {
+    const cache = CacheService.getScriptCache();
+    const key = 'u' + body.update_id;
+    if (!cache.get(key)) {          // Telegram может прислать то же событие повторно
+      cache.put(key, '1', 21600);
+      try { handleUpdate(body); } catch (err) { console.error(err); }
+    }
+    return ContentService.createTextOutput('ok');
+  }
+
+  // Запросы из мини-приложения
+  let res;
+  try { res = handleApi(body); }
+  catch (err) { res = { ok: false, error: String(err && err.message || err) }; }
+  return ContentService.createTextOutput(JSON.stringify(res)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/* ======================= API МИНИ-ПРИЛОЖЕНИЯ ======================= */
+
+function handleApi(body) {
+  const user = verifyInitData(body.initData);
+  switch (body.action) {
+    case 'submit': return submitBrief(user, body.data || {}, body.files || {});
+    case 'get':    return { ok: true, item: publicItem(mustAccess(user, body.id), user) };
+    case 'take':   return { ok: true, item: publicItem(takeRequest(user, body.id).item, user) };
+    case 'result': return { ok: true, item: publicItem(submitResult(user, body.id, body.data || {}, body.files || {}), user) };
+    case 'accept': return { ok: true, item: publicItem(acceptRequest(user, body.id), user) };
+    case 'my':     return { ok: true, items: myList(user) };
+  }
+  throw new Error('Неизвестное действие');
+}
+
+/** Проверка подписи Telegram: данные пришли из настоящего Telegram от этого пользователя. */
+function verifyInitData(initData) {
+  if (!initData) throw new Error('Откройте форму через бота в Telegram');
+  const params = {};
+  initData.split('&').forEach(pair => {
+    const i = pair.indexOf('=');
+    params[decodeURIComponent(pair.slice(0, i))] = decodeURIComponent(pair.slice(i + 1));
+  });
+  const hash = params.hash; delete params.hash;
+  const dcs = Object.keys(params).sort().map(k => k + '=' + params[k]).join('\n');
+  const secret = Utilities.computeHmacSha256Signature(
+    Utilities.newBlob(prop('BOT_TOKEN')).getBytes(), Utilities.newBlob('WebAppData').getBytes());
+  const sig = Utilities.computeHmacSha256Signature(Utilities.newBlob(dcs).getBytes(), secret);
+  const hex = sig.map(b => ((b + 256) % 256).toString(16).padStart(2, '0')).join('');
+  if (hex !== hash) throw new Error('Не удалось подтвердить вход. Откройте форму заново из бота');
+  if (Date.now() / 1000 - Number(params.auth_date || 0) > 7 * 86400) throw new Error('Сессия устарела. Откройте форму заново из бота');
+  return JSON.parse(params.user);
+}
+
+/* ======================= ДЕЙСТВИЯ ======================= */
+
+function submitBrief(user, d, files) {
+  if (!d.project || !d.fulltext) throw new Error('Заполните название проекта и текст публикации');
+  if (!prop('GROUP_CHAT_ID')) throw new Error('Чат пресс-центра ещё не подключён: напишите /bind в чате пресс-центра');
+
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  let id;
+  try {
+    id = Number(prop('LAST_ID') || 0) + 1;
+    P.setProperty('LAST_ID', String(id));
+    const row = {
+      id, created: now(), status: 'Новая',
+      manager_id: user.id, manager_name: fullName(user), manager_username: user.username || '',
+      project: d.project, contact: d.manager, goal: d.goal, priority: d.priority,
+      deadline: d.deadline, quantity: d.quantity, media: (d.mediaType || []).join(', '), payment: d.payment,
+      tz: d.tz, requirements: d.requirements, fulltext: d.fulltext,
+      photo: saveFiles(files.photos, id, 'фото'), banner: saveFiles(files.banners, id, 'баннер'),
+      editing: d.editing, keep: d.keep, result_wanted: (d.result || []).join(', ')
+    };
+    sheet().appendRow(KEYS.map(k => clean(row[k])));
+  } finally { lock.releaseLock(); }
+
+  const item = findById(id);
+  const sent = tg('sendMessage', {
+    chat_id: prop('GROUP_CHAT_ID'), text: groupText(item), parse_mode: 'HTML',
+    reply_markup: groupKeyboard(item), disable_web_page_preview: true
+  });
+  if (sent.ok) update(item, { group_msg_id: sent.result.message_id });
+
+  tg('sendMessage', {
+    chat_id: user.id, parse_mode: 'HTML',
+    text: `✅ <b>Заявка №${id} «${esc(item.project)}» отправлена в пресс-центр.</b>\nНапишу, когда её возьмут в работу.`,
+    reply_markup: { inline_keyboard: [[{ text: '📄 Открыть заявку', web_app: { url: cardUrl(id) } }]] }
+  });
+  return { ok: true, id };
+}
+
+function takeRequest(user, id) {
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  let item;
+  try {
+    item = findById(id);
+    if (!item) throw new Error('Заявка не найдена');
+    if (!isPressMember(user.id)) throw new Error('Брать заявки могут только участники чата пресс-центра');
+    if (item.status !== 'Новая') {
+      return { item, already: true, msg: item.executor_name ? 'Заявку уже взял(а) ' + item.executor_name : 'Заявка уже в работе' };
+    }
+    update(item, { status: 'В работе', executor_id: user.id, executor_name: fullName(user), taken_at: now() });
+  } finally { lock.releaseLock(); }
+
+  refreshGroupMessage(item);
+  tg('sendMessage', {
+    chat_id: item.manager_id, parse_mode: 'HTML',
+    text: `🛠 <b>Заявка №${item.id} «${esc(item.project)}» в работе.</b>\nИсполнитель: ${esc(item.executor_name)}${user.username ? ' (@' + user.username + ')' : ''}.\nКак только появятся ссылки, пришлю их сюда.`
+  });
+  return { item };
+}
+
+function submitResult(user, id, d, files) {
+  const item = findById(id);
+  if (!item) throw new Error('Заявка не найдена');
+  if (String(item.executor_id) !== String(user.id)) throw new Error('Сдать результат может только исполнитель этой заявки');
+  if (!String(d.links || '').trim()) throw new Error('Добавьте хотя бы одну ссылку');
+  const again = item.status === 'Размещено';
+
+  const shots = saveFiles(files.shots, id, 'скриншот');
+  update(item, {
+    links: d.links, reach: d.reach || '', notes: d.notes || '',
+    screens: [item.screens, shots].filter(Boolean).join('\n'),
+    status: 'Размещено', done_at: now()
+  });
+  refreshGroupMessage(item);
+
+  const links = lines(item.links).map((l, i) => `${i + 1}. ${esc(l)}`).join('\n');
+  const shotLinks = lines(item.screens).map((u, i) => `<a href="${esc(u)}">скриншот ${i + 1}</a>`).join(', ');
+  let text = `📬 <b>${again ? 'Обновлён результат' : 'Готово!'} Заявка №${item.id} «${esc(item.project)}»</b>\n` +
+    `Исполнитель: ${esc(item.executor_name)}\n\n🔗 <b>Ссылки:</b>\n${links}`;
+  if (item.reach) text += `\n\n📊 <b>Охват / просмотры:</b> ${esc(item.reach)}`;
+  if (shotLinks) text += `\n\n🖼 <b>Скриншоты:</b> ${shotLinks}`;
+  if (item.notes) text += `\n\n💬 ${esc(item.notes)}`;
+
+  tg('sendMessage', {
+    chat_id: item.manager_id, text, parse_mode: 'HTML', disable_web_page_preview: true,
+    reply_markup: { inline_keyboard: [
+      [{ text: '✅ Принять результат', callback_data: 'accept:' + item.id }],
+      [{ text: '📄 Открыть карточку', web_app: { url: cardUrl(item.id) } }]
+    ] }
+  });
+  return item;
+}
+
+function acceptRequest(user, id) {
+  const item = findById(id);
+  if (!item) throw new Error('Заявка не найдена');
+  if (String(item.manager_id) !== String(user.id)) throw new Error('Закрыть заявку может только её автор');
+  if (item.status === 'Закрыто') return item;
+  update(item, { status: 'Закрыто', closed_at: now() });
+  refreshGroupMessage(item);
+  if (item.executor_id) tg('sendMessage', {
+    chat_id: item.executor_id, parse_mode: 'HTML',
+    text: `👍 Менеджер принял результат по заявке №${item.id} «${esc(item.project)}». Спасибо!`
+  });
+  return item;
+}
+
+function myList(user) {
+  const member = isPressMember(user.id);
+  return readAll()
+    .filter(x => String(x.manager_id) === String(user.id) || (member && String(x.executor_id) === String(user.id)))
+    .reverse().slice(0, 30)
+    .map(x => ({ id: x.id, project: x.project, status: x.status, deadline: x.deadline,
+                 role: String(x.manager_id) === String(user.id) ? 'manager' : 'executor' }));
+}
+
+/* ======================= ДОСТУП ======================= */
+
+function mustAccess(user, id) {
+  const item = findById(id);
+  if (!item) throw new Error('Заявка не найдена');
+  if (String(item.manager_id) === String(user.id) || isPressMember(user.id)) return item;
+  throw new Error('Эта заявка вам недоступна');
+}
+
+function publicItem(item, user) {
+  const out = {};
+  KEYS.forEach(k => { if (!/_id$/.test(k) || k === 'id') out[k] = item[k]; });
+  const isManager = String(item.manager_id) === String(user.id);
+  out.role = isManager ? 'manager' : 'executor';
+  out.is_mine = String(item.executor_id) === String(user.id);
+  return out;
+}
+
+/** Участник ли человек чата пресс-центра (ответ кэшируется на 10 минут). */
+function isPressMember(userId) {
+  const cache = CacheService.getScriptCache(), key = 'm' + userId;
+  const hit = cache.get(key);
+  if (hit) return hit === '1';
+  const r = tg('getChatMember', { chat_id: prop('GROUP_CHAT_ID'), user_id: userId });
+  const yes = r.ok && ['creator', 'administrator', 'member', 'restricted'].includes(r.result.status);
+  cache.put(key, yes ? '1' : '0', 600);
+  return yes;
+}
+
+/* ======================= TELEGRAM-ОБНОВЛЕНИЯ ======================= */
+
+function handleUpdate(u) {
+  if (u.callback_query) return handleCallback(u.callback_query);
+  const m = u.message;
+  if (!m) return;
+
+  // Группа превратилась в супергруппу — у чата новый id
+  if (m.migrate_to_chat_id && String(m.chat.id) === prop('GROUP_CHAT_ID')) {
+    P.setProperty('GROUP_CHAT_ID', String(m.migrate_to_chat_id));
+    return;
+  }
+
+  const text = (m.text || '').trim();
+  const cmd = text.split(/\s|@/)[0].toLowerCase();
+  const isGroup = m.chat.type === 'group' || m.chat.type === 'supergroup';
+
+  if (isGroup) {
+    if (cmd === '/bind') {
+      if (prop('GROUP_CHAT_ID') && prop('GROUP_CHAT_ID') !== String(m.chat.id)) {
+        return reply(m, 'Бот уже привязан к другому чату. Чтобы сменить чат, очистите свойство GROUP_CHAT_ID в Apps Script.');
+      }
+      P.setProperty('GROUP_CHAT_ID', String(m.chat.id));
+      return reply(m, '✅ Готово! Новые заявки будут приходить в этот чат.');
+    }
+    return;
+  }
+
+  // Личный чат
+  if (cmd === '/my') {
+    const items = myList(m.from);
+    const list = items.length
+      ? items.slice(0, 15).map(x => `№${x.id} · ${esc(x.project)} — <b>${esc(x.status)}</b>`).join('\n')
+      : 'Заявок пока нет.';
+    return tg('sendMessage', { chat_id: m.chat.id, parse_mode: 'HTML', text: '📋 <b>Ваши заявки</b>\n\n' + list,
+      reply_markup: { inline_keyboard: [[{ text: '📋 Открыть списком', web_app: { url: prop('MINIAPP_URL') + '?screen=my' } }]] } });
+  }
+  return tg('sendMessage', {
+    chat_id: m.chat.id, parse_mode: 'HTML',
+    text: '👋 <b>Здравствуйте!</b>\nЗдесь можно отправить заявку на размещение в СМИ.\n\n' +
+          'Заполните форму — она сразу уйдёт в пресс-центр. Я напишу, когда заявку возьмут в работу, и пришлю ссылки на публикации, когда всё будет готово.',
+    reply_markup: { inline_keyboard: [
+      [{ text: '📝 Новая заявка', web_app: { url: prop('MINIAPP_URL') } }],
+      [{ text: '📋 Мои заявки', web_app: { url: prop('MINIAPP_URL') + '?screen=my' } }]
+    ] }
+  });
+}
+
+function handleCallback(q) {
+  const [action, id] = String(q.data || '').split(':');
+  try {
+    if (action === 'take') {
+      const r = takeRequest(q.from, id);
+      return answer(q, r.already ? r.msg : 'Заявка ваша! Когда будет готово — «Сдать результат».', !!r.already);
+    }
+    if (action === 'accept') {
+      acceptRequest(q.from, id);
+      tg('editMessageReplyMarkup', { chat_id: q.message.chat.id, message_id: q.message.message_id,
+        reply_markup: { inline_keyboard: [[{ text: '✅ Принято', callback_data: 'noop' }]] } });
+      return answer(q, 'Заявка закрыта. Спасибо!');
+    }
+    return answer(q, '');
+  } catch (err) {
+    return answer(q, String(err.message || err), true);
+  }
+}
+
+/* ======================= СООБЩЕНИЕ В ЧАТЕ ПРЕСС-ЦЕНТРА ======================= */
+
+function groupText(x) {
+  const icon = { 'Новая': '🆕', 'В работе': '🛠', 'Размещено': '📬', 'Закрыто': '✅' }[x.status] || '🆕';
+  let t = `${icon} <b>Заявка №${x.id}</b> · ${esc(x.status)}\n<b>${esc(x.project)}</b>\n\n` +
+    `👤 ${esc(x.manager_name)}${x.manager_username ? ' (@' + esc(x.manager_username) + ')' : ''}\n` +
+    `🎯 ${esc(x.goal)}\n⏱ ${esc(x.priority)} · до ${esc(x.deadline)}\n` +
+    `📰 ${esc(x.media)} · ${esc(x.payment)} · размещений: ${esc(x.quantity)}\n` +
+    `📎 Нужно: ${esc(x.result_wanted)}`;
+  if (x.executor_name) t += `\n\n🙋 Исполнитель: <b>${esc(x.executor_name)}</b>`;
+  if (x.status === 'Размещено') t += `\n🔗 Результат отправлен менеджеру ${esc(x.done_at)}`;
+  if (x.status === 'Закрыто') t += `\n✅ Менеджер принял результат`;
+  return t;
+}
+
+function groupKeyboard(x) {
+  const open = { text: '📄 Открыть карточку', url: directLink('c' + x.id) };
+  if (x.status === 'Новая') return { inline_keyboard: [[{ text: '✋ Взять в работу', callback_data: 'take:' + x.id }], [open]] };
+  if (x.status === 'В работе') return { inline_keyboard: [[{ text: '📤 Сдать результат', url: directLink('c' + x.id) }]] };
+  return { inline_keyboard: [[open]] };
+}
+
+function refreshGroupMessage(x) {
+  if (!x.group_msg_id) return;
+  tg('editMessageText', {
+    chat_id: prop('GROUP_CHAT_ID'), message_id: Number(x.group_msg_id), text: groupText(x),
+    parse_mode: 'HTML', reply_markup: groupKeyboard(x), disable_web_page_preview: true
+  });
+}
+
+/* ======================= ТАБЛИЦА ======================= */
+
+function sheet() { return SpreadsheetApp.openById(prop('SHEET_ID')).getSheetByName('Заявки'); }
+
+function readAll() {
+  const v = sheet().getDataRange().getValues();
+  return v.slice(1).map((r, i) => {
+    const o = { row: i + 2 };
+    KEYS.forEach((k, j) => o[k] = r[j] === undefined ? '' : String(r[j]));
+    return o;
+  }).filter(o => o.id);
+}
+function findById(id) { return readAll().find(x => String(x.id) === String(id)); }
+
+function update(item, patch) {
+  const sh = sheet();
+  Object.keys(patch).forEach(k => {
+    const c = KEYS.indexOf(k) + 1;
+    if (c > 0) { sh.getRange(item.row, c).setValue(clean(patch[k])); item[k] = String(patch[k] ?? ''); }
+  });
+}
+
+/** Защита от формул: текст, начинающийся с = + - @, сохраняем как текст. */
+function clean(v) {
+  const s = v === undefined || v === null ? '' : String(v);
+  return /^[=+\-@]/.test(s) ? "'" + s : s;
+}
+
+/* ======================= ФАЙЛЫ ======================= */
+
+function saveFiles(list, id, label) {
+  if (!list || !list.length) return '';
+  const folder = DriveApp.getFolderById(prop('FOLDER_ID'));
+  return list.map((f, i) => {
+    const name = `№${id} ${label}${list.length > 1 ? ' ' + (i + 1) : ''} — ${f.name}`;
+    const file = folder.createFile(Utilities.newBlob(Utilities.base64Decode(f.data), f.type, name));
+    try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (_) {}
+    return file.getUrl();
+  }).join('\n');
+}
+
+/* ======================= ВСПОМОГАТЕЛЬНОЕ ======================= */
+
+function tg(method, payload) {
+  const r = UrlFetchApp.fetch('https://api.telegram.org/bot' + prop('BOT_TOKEN') + '/' + method, {
+    method: 'post', contentType: 'application/json', payload: JSON.stringify(payload), muteHttpExceptions: true
+  });
+  try { return JSON.parse(r.getContentText()); } catch (_) { return { ok: false }; }
+}
+function reply(m, text) { return tg('sendMessage', { chat_id: m.chat.id, text, reply_to_message_id: m.message_id }); }
+function answer(q, text, alert) { return tg('answerCallbackQuery', { callback_query_id: q.id, text, show_alert: !!alert }); }
+function fullName(u) { return [u.first_name, u.last_name].filter(Boolean).join(' ') || u.username || 'Без имени'; }
+function esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function lines(s) { return String(s || '').split(/\n+/).map(x => x.trim()).filter(Boolean); }
+function cardUrl(id) { return prop('MINIAPP_URL') + '?id=' + id; }
+function directLink(param) { return `https://t.me/${prop('BOT_USERNAME')}/${prop('APP_SHORT_NAME')}?startapp=${param}`; }
